@@ -11,7 +11,6 @@
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "sanitizer_common/sanitizer_flags.h"
-#include "sanitizer_common/sanitizer_flag_parser.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
 
@@ -20,19 +19,20 @@ namespace __dsan {
 static Context *ctx;
 
 static u32 CurrentStackTrace(Thread *thr, uptr skip) {
-  BufferedStackTrace stack;
+  StackTrace trace;
   thr->ignore_interceptors = true;
-  stack.Unwind(1000, 0, 0, 0, 0, 0, false);
+  trace.Unwind(1000, 0, 0, 0, 0, 0, false);
   thr->ignore_interceptors = false;
-  if (stack.size <= skip)
+  if (trace.size <= skip)
     return 0;
-  return StackDepotPut(StackTrace(stack.trace + skip, stack.size - skip));
+  return StackDepotPut(trace.trace + skip, trace.size - skip);
 }
 
 static void PrintStackTrace(Thread *thr, u32 stk) {
-  StackTrace stack = StackDepotGet(stk);
+  uptr size = 0;
+  const uptr *trace = StackDepotGet(stk, &size);
   thr->ignore_interceptors = true;
-  stack.Print();
+  StackTrace::PrintStack(trace, size);
   thr->ignore_interceptors = false;
 }
 
@@ -65,27 +65,22 @@ u32 Callback::Unwind() {
   return CurrentStackTrace(thr, 3);
 }
 
-static void InitializeFlags() {
-  Flags *f = flags();
+void InitializeFlags(Flags *f, const char *env) {
+  internal_memset(f, 0, sizeof(*f));
 
   // Default values.
   f->second_deadlock_stack = false;
 
-  SetCommonFlagsDefaults();
-  {
-    // Override some common flags defaults.
-    CommonFlags cf;
-    cf.CopyFrom(*common_flags());
-    cf.allow_addr2line = true;
-    OverrideCommonFlags(cf);
-  }
+  SetCommonFlagsDefaults(f);
+  // Override some common flags defaults.
+  f->allow_addr2line = true;
 
   // Override from command line.
-  FlagParser parser;
-  RegisterFlag(&parser, "second_deadlock_stack", "", &f->second_deadlock_stack);
-  RegisterCommonFlags(&parser);
-  parser.ParseString(GetEnv("DSAN_OPTIONS"));
-  SetVerbosity(common_flags()->verbosity);
+  ParseFlag(env, &f->second_deadlock_stack, "second_deadlock_stack", "");
+  ParseCommonFlagsFromString(f, env);
+
+  // Copy back to common flags.
+  *common_flags() = *f;
 }
 
 void Initialize() {
@@ -93,7 +88,8 @@ void Initialize() {
   ctx = new(ctx_mem) Context();
 
   InitializeInterceptors();
-  InitializeFlags();
+  InitializeFlags(flags(), GetEnv("DSAN_OPTIONS"));
+  common_flags()->symbolize = true;
   ctx->dd = DDetector::Create(flags());
 }
 

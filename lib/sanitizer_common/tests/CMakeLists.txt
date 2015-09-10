@@ -1,10 +1,5 @@
 include(CompilerRTCompile)
 
-clang_compiler_add_cxx_check()
-
-# FIXME: use SANITIZER_COMMON_SUPPORTED_ARCH here
-filter_available_targets(SANITIZER_UNITTEST_SUPPORTED_ARCH x86_64 i386 mips64 mips64el)
-
 set(SANITIZER_UNITTESTS
   sanitizer_allocator_test.cc
   sanitizer_atomic_test.cc
@@ -24,11 +19,9 @@ set(SANITIZER_UNITTESTS
   sanitizer_printf_test.cc
   sanitizer_procmaps_test.cc
   sanitizer_stackdepot_test.cc
-  sanitizer_stacktrace_printer_test.cc
   sanitizer_stacktrace_test.cc
   sanitizer_stoptheworld_test.cc
   sanitizer_suppressions_test.cc
-  sanitizer_symbolizer_test.cc
   sanitizer_test_main.cc
   sanitizer_thread_registry_test.cc)
 
@@ -51,30 +44,19 @@ set(SANITIZER_TEST_CFLAGS_COMMON
   -Werror=sign-compare
   -Wno-non-virtual-dtor)
 
-if(MSVC)
-  # Disable exceptions on Windows until they work reliably.
-  list(APPEND SANITIZER_TEST_CFLAGS_COMMON -fno-exceptions -DGTEST_HAS_SEH=0)
-endif()
-
 # -gline-tables-only must be enough for these tests, so use it if possible.
 if(COMPILER_RT_TEST_COMPILER_ID MATCHES "Clang")
-  list(APPEND SANITIZER_TEST_CFLAGS_COMMON -gline-tables-only)
+  list(APPEND ASAN_UNITTEST_COMMON_CFLAGS -gline-tables-only)
 else()
-  list(APPEND SANITIZER_TEST_CFLAGS_COMMON -g)
+  list(APPEND ASAN_UNITTEST_COMMON_CFLAGS -g)
 endif()
 
 if(NOT MSVC)
   list(APPEND SANITIZER_TEST_LINK_FLAGS_COMMON --driver-mode=g++)
 endif()
 
-set(SANITIZER_TEST_LINK_LIBS)
-append_list_if(ANDROID log SANITIZER_TEST_LINK_LIBS)
-# NDK r10 requires -latomic almost always.
-append_list_if(ANDROID atomic SANITIZER_TEST_LINK_LIBS)
-
-append_list_if(COMPILER_RT_HAS_LIBDL -ldl SANITIZER_TEST_LINK_FLAGS_COMMON)
-append_list_if(COMPILER_RT_HAS_LIBRT -lrt SANITIZER_TEST_LINK_FLAGS_COMMON)
-append_list_if(COMPILER_RT_HAS_LIBPTHREAD -pthread SANITIZER_TEST_LINK_FLAGS_COMMON)
+append_if(COMPILER_RT_HAS_LIBDL -ldl SANITIZER_TEST_LINK_FLAGS_COMMON)
+append_if(COMPILER_RT_HAS_LIBPTHREAD -pthread SANITIZER_TEST_LINK_FLAGS_COMMON)
 # x86_64 FreeBSD 9.2 additionally requires libc++ to build the tests. Also,
 # 'libm' shall be specified explicitly to build i386 tests.
 if(CMAKE_SYSTEM MATCHES "FreeBSD-9.2-RELEASE")
@@ -159,7 +141,7 @@ macro(add_sanitizer_tests_for_arch arch)
   endif()
 endmacro()
 
-if(COMPILER_RT_CAN_EXECUTE_TESTS AND NOT ANDROID)
+if(COMPILER_RT_CAN_EXECUTE_TESTS)
   # We use just-built clang to build sanitizer_common unittests, so we must
   # be sure that produced binaries would work.
   if(APPLE)
@@ -167,36 +149,41 @@ if(COMPILER_RT_CAN_EXECUTE_TESTS AND NOT ANDROID)
                              $<TARGET_OBJECTS:RTSanitizerCommon.osx>)
   else()
     if(CAN_TARGET_x86_64)
+      add_sanitizer_common_lib("RTSanitizerCommon.test.x86_64"
+                               $<TARGET_OBJECTS:RTSanitizerCommon.x86_64>
+                               $<TARGET_OBJECTS:RTSanitizerCommonLibc.x86_64>)
       add_sanitizer_common_lib("RTSanitizerCommon.test.nolibc.x86_64"
                                $<TARGET_OBJECTS:RTSanitizerCommon.x86_64>)
     endif()
-    foreach(arch ${SANITIZER_UNITTEST_SUPPORTED_ARCH})
-      add_sanitizer_common_lib("RTSanitizerCommon.test.${arch}"
-                               $<TARGET_OBJECTS:RTSanitizerCommon.${arch}>
-                               $<TARGET_OBJECTS:RTSanitizerCommonLibc.${arch}>)
-    endforeach()
+    if(CAN_TARGET_i386)
+      add_sanitizer_common_lib("RTSanitizerCommon.test.i386"
+                               $<TARGET_OBJECTS:RTSanitizerCommon.i386>
+                               $<TARGET_OBJECTS:RTSanitizerCommonLibc.i386>)
+    endif()
   endif()
-  foreach(arch ${SANITIZER_UNITTEST_SUPPORTED_ARCH})
-    add_sanitizer_tests_for_arch(${arch})
-  endforeach()
+  if(CAN_TARGET_x86_64)
+    add_sanitizer_tests_for_arch(x86_64)
+  endif()
+  if(CAN_TARGET_i386)
+    add_sanitizer_tests_for_arch(i386)
+  endif()
 endif()
 
 if(ANDROID)
-  foreach(arch ${SANITIZER_COMMON_SUPPORTED_ARCH})
-    add_executable(SanitizerTest
-      ${SANITIZER_UNITTESTS}
-      ${COMPILER_RT_GTEST_SOURCE}
-      $<TARGET_OBJECTS:RTSanitizerCommon.${arch}>
-      $<TARGET_OBJECTS:RTSanitizerCommonLibc.${arch}>)
-    set_target_compile_flags(SanitizerTest
-      ${SANITIZER_COMMON_CFLAGS}
-      ${SANITIZER_TEST_CFLAGS_COMMON})
-    # Setup correct output directory and link flags.
-    set_target_properties(SanitizerTest PROPERTIES
-      RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-    set_target_link_flags(SanitizerTest ${SANITIZER_TEST_LINK_FLAGS_COMMON})
-    target_link_libraries(SanitizerTest ${SANITIZER_TEST_LINK_LIBS})
-    # Add unit test to test suite.
-    add_dependencies(SanitizerUnitTests SanitizerTest)
-  endforeach()
+  # We assume that unit tests on Android are built in a build
+  # tree with fresh Clang as a host compiler.
+  add_executable(SanitizerTest
+    ${SANITIZER_UNITTESTS}
+    ${COMPILER_RT_GTEST_SOURCE}
+    $<TARGET_OBJECTS:RTSanitizerCommon.arm.android>)
+  set_target_compile_flags(SanitizerTest
+    ${SANITIZER_COMMON_CFLAGS}
+    ${SANITIZER_TEST_CFLAGS_COMMON})
+  # Setup correct output directory and link flags.
+  set_target_properties(SanitizerTest PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  set_target_link_flags(SanitizerTest ${SANITIZER_TEST_LINK_FLAGS_COMMON})
+  target_link_libraries(SanitizerTest log)
+  # Add unit test to test suite.
+  add_dependencies(SanitizerUnitTests SanitizerTest)
 endif()

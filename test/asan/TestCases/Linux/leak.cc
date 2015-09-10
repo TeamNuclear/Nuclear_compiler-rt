@@ -1,10 +1,10 @@
 // Minimal test for LeakSanitizer+AddressSanitizer.
-// REQUIRES: leak-detection
+// REQUIRES: asan-64-bits
 //
 // RUN: %clangxx_asan  %s -o %t
-// RUN: env ASAN_OPTIONS=$ASAN_OPTIONS:detect_leaks=1 not %run %t  2>&1 | FileCheck %s
-// RUN: env ASAN_OPTIONS=$ASAN_OPTIONS                not %run %t  2>&1 | FileCheck %s
-// RUN: env ASAN_OPTIONS=$ASAN_OPTIONS:detect_leaks=0     %run %t
+// RUN: ASAN_OPTIONS=detect_leaks=1 not %run %t  2>&1 | FileCheck %s
+// RUN: ASAN_OPTIONS=""             not %run %t  2>&1 | FileCheck %s
+// RUN: ASAN_OPTIONS=detect_leaks=0     %run %t
 #include <stdio.h>
 int *t;
 

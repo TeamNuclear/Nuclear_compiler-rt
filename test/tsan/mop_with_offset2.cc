@@ -1,8 +1,11 @@
 // RUN: %clangxx_tsan -O1 %s -o %t && %deflake %run %t | FileCheck %s
-#include "test.h"
+#include <pthread.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <unistd.h>
 
 void *Thread1(void *x) {
-  barrier_wait(&barrier);
+  sleep(1);
   int *p = (int*)x;
   p[0] = 1;
   return NULL;
@@ -11,12 +14,10 @@ void *Thread1(void *x) {
 void *Thread2(void *x) {
   char *p = (char*)x;
   p[2] = 1;
-  barrier_wait(&barrier);
   return NULL;
 }
 
 int main() {
-  barrier_init(&barrier, 2);
   int *data = new int(42);
   fprintf(stderr, "ptr1=%p\n", data);
   fprintf(stderr, "ptr2=%p\n", (char*)data + 2);

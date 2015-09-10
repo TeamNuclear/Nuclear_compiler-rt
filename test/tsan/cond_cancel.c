@@ -2,21 +2,18 @@
 // CHECK-NOT: WARNING
 // CHECK: OK
 
-#include "test.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <unistd.h>
 
 pthread_mutex_t m;
 pthread_cond_t c;
 int x;
 
-static void my_cleanup(void *arg) {
-  printf("my_cleanup\n");
-  pthread_mutex_unlock((pthread_mutex_t*)arg);
-}
-
 void *thr1(void *p) {
   pthread_mutex_lock(&m);
-  pthread_cleanup_push(my_cleanup, &m);
-  barrier_wait(&barrier);
+  pthread_cleanup_push((void(*)(void *arg))pthread_mutex_unlock, &m);
   while (x == 0)
     pthread_cond_wait(&c, &m);
   pthread_cleanup_pop(1);
@@ -24,15 +21,12 @@ void *thr1(void *p) {
 }
 
 int main() {
-  barrier_init(&barrier, 2);
-
   pthread_t th;
 
   pthread_mutex_init(&m, 0);
   pthread_cond_init(&c, 0);
 
   pthread_create(&th, 0, thr1, 0);
-  barrier_wait(&barrier);
   sleep(1);  // let it block on cond var
   pthread_cancel(th);
 

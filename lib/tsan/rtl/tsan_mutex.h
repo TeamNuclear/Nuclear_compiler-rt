@@ -52,7 +52,7 @@ class Mutex {
 
  private:
   atomic_uintptr_t state_;
-#if SANITIZER_DEBUG
+#if TSAN_DEBUG
   MutexType type_;
 #endif
 #if TSAN_COLLECT_STATS

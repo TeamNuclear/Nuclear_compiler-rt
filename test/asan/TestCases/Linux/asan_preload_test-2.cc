@@ -1,20 +1,18 @@
 // Test that preloaded runtime works with unsanitized executables.
 //
 // RUN: %clangxx %s -o %t
-// RUN: env LD_PRELOAD=%shared_libasan not %run %t 2>&1 | FileCheck %s
+// RUN: LD_PRELOAD=%shared_libasan not %run %t 2>&1 | FileCheck %s
 
 // REQUIRES: asan-dynamic-runtime
-
-// This way of setting LD_PRELOAD does not work with Android test runner.
-// REQUIRES: not-android
+// XFAIL: android
 
 #include <stdlib.h>
 
-extern "C" ssize_t write(int fd, const void *buf, size_t count);
+extern "C" void *memset(void *p, int val, size_t n);
 
 void do_access(void *p) {
   // CHECK: AddressSanitizer: heap-buffer-overflow
-  write(1, p, 2);
+  memset(p, 0, 2);
 }
 
 int main(int argc, char **argv) {

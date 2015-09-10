@@ -1,8 +1,7 @@
 DEBUG=0
 LDFLAGS=-ldl -lrt -lpthread -pie
 CXXFLAGS = -std=c++11 -fPIE -fno-rtti -g -Wall -Werror \
-					 -DGTEST_HAS_RTTI=0 -DSANITIZER_DEBUG=$(DEBUG) \
-					 -DTSAN_CONTAINS_UBSAN=0
+					 -DGTEST_HAS_RTTI=0 -DTSAN_DEBUG=$(DEBUG) -DSANITIZER_DEBUG=$(DEBUG)
 CLANG=clang
 FILECHECK=FileCheck
 # Silence warnings that Clang produces for gtest code.
@@ -12,9 +11,7 @@ ifeq ($(DEBUG), 0)
 	CXXFLAGS += -O3
 endif
 ifeq ($(CXX), $(CLANG)++)
-  CXXFLAGS += -Wno-unused-private-field -Wno-static-in-inline -Wgnu
-else
-  CXXFLAGS += -Wno-maybe-uninitialized
+  CXXFLAGS+= -Wno-unused-private-field -Wno-static-in-inline -Wgnu
 endif
 
 LIBTSAN=rtl/libtsan.a

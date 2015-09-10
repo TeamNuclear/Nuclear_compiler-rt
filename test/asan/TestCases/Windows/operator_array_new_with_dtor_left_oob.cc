@@ -18,8 +18,7 @@ int main() {
 //        https://code.google.com/p/address-sanitizer/issues/detail?id=314
 // CHECK: [[ADDR]] is located {{.*}} bytes to the left of 172-byte region
 // CHECK-LABEL: allocated by thread T0 here:
-// FIXME: The 'operator new' frame should have [].
-// CHECK-NEXT: {{#0 .* operator new}}
-// CHECK-NEXT: {{#1 .* main .*operator_array_new_with_dtor_left_oob.cc}}:[[@LINE-13]]
+// CHECK-NEXT: {{#0 .* operator new}}[]
+// CHECK-NEXT: {{#1 .* main .*operator_array_new_with_dtor_left_oob.cc}}:[[@LINE-12]]
   delete [] buffer;
 }

@@ -5,7 +5,6 @@
 
 // REQUIRES: compiler-rt-optimized
 // XFAIL: arm-linux-gnueabi
-// XFAIL: armv7l-unknown-linux-gnueabihf
 
 #include <string.h>
 #include <stdlib.h>

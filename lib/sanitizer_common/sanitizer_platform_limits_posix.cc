@@ -15,19 +15,7 @@
 
 #include "sanitizer_platform.h"
 #if SANITIZER_LINUX || SANITIZER_FREEBSD || SANITIZER_MAC
-// Tests in this file assume that off_t-dependent data structures match the
-// libc ABI. For example, struct dirent here is what readdir() function (as
-// exported from libc) returns, and not the user-facing "dirent", which
-// depends on _FILE_OFFSET_BITS setting.
-// To get this "true" dirent definition, we undefine _FILE_OFFSET_BITS below.
-#ifdef _FILE_OFFSET_BITS
-#undef _FILE_OFFSET_BITS
-#endif
-#if SANITIZER_FREEBSD
-#define _WANT_RTENTRY
-#include <sys/param.h>
-#include <sys/socketvar.h>
-#endif
+
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <errno.h>
@@ -97,6 +85,7 @@
 # include <sys/link_elf.h>
 # include <netinet/ip_mroute.h>
 # include <netinet/in.h>
+# include <netinet/ip_compat.h>
 # include <net/ethernet.h>
 # include <net/ppp_defs.h>
 # include <glob.h>
@@ -116,9 +105,6 @@
 #if SANITIZER_LINUX || SANITIZER_FREEBSD
 # include <utime.h>
 # include <sys/ptrace.h>
-# if defined(__mips64)
-#  include <asm/ptrace.h>
-# endif
 #endif
 
 #if !SANITIZER_ANDROID
@@ -135,20 +121,13 @@
 #include <netax25/ax25.h>
 #include <netipx/ipx.h>
 #include <netrom/netrom.h>
-#if HAVE_RPC_XDR_H
-# include <rpc/xdr.h>
-#elif HAVE_TIRPC_RPC_XDR_H
-# include <tirpc/rpc/xdr.h>
-#endif
+#include <rpc/xdr.h>
 #include <scsi/scsi.h>
 #include <sys/mtio.h>
 #include <sys/kd.h>
 #include <sys/shm.h>
 #include <sys/statvfs.h>
 #include <sys/timex.h>
-#if defined(__mips64)
-# include <sys/procfs.h>
-#endif
 #include <sys/user.h>
 #include <sys/ustat.h>
 #include <linux/cyclades.h>
@@ -293,19 +272,14 @@ namespace __sanitizer {
 #endif
 
 #if SANITIZER_LINUX && !SANITIZER_ANDROID && \
-    (defined(__i386) || defined(__x86_64) || defined(__mips64))
-#if defined(__mips64)
-  unsigned struct_user_regs_struct_sz = sizeof(struct pt_regs);
-  unsigned struct_user_fpregs_struct_sz = sizeof(elf_fpregset_t);
-#else
+    (defined(__i386) || defined(__x86_64))
   unsigned struct_user_regs_struct_sz = sizeof(struct user_regs_struct);
   unsigned struct_user_fpregs_struct_sz = sizeof(struct user_fpregs_struct);
-#endif // __mips64
-#if (defined(__x86_64) || defined(__mips64))
+#ifdef __x86_64
   unsigned struct_user_fpxregs_struct_sz = 0;
 #else
   unsigned struct_user_fpxregs_struct_sz = sizeof(struct user_fpxregs_struct);
-#endif // __x86_64 || __mips64
+#endif
 
   int ptrace_peektext = PTRACE_PEEKTEXT;
   int ptrace_peekdata = PTRACE_PEEKDATA;
@@ -426,7 +400,7 @@ namespace __sanitizer {
   unsigned struct_sioc_vif_req_sz = sizeof(struct sioc_vif_req);
 #endif
 
-  const unsigned IOCTL_NOT_PRESENT = 0;
+  unsigned IOCTL_NOT_PRESENT = 0;
 
   unsigned IOCTL_FIOASYNC = FIOASYNC;
   unsigned IOCTL_FIOCLEX = FIOCLEX;
@@ -579,9 +553,7 @@ namespace __sanitizer {
   unsigned IOCTL_PPPIOCSMAXCID = PPPIOCSMAXCID;
   unsigned IOCTL_PPPIOCSMRU = PPPIOCSMRU;
   unsigned IOCTL_PPPIOCSXASYNCMAP = PPPIOCSXASYNCMAP;
-  unsigned IOCTL_SIOCADDRT = SIOCADDRT;
   unsigned IOCTL_SIOCDARP = SIOCDARP;
-  unsigned IOCTL_SIOCDELRT = SIOCDELRT;
   unsigned IOCTL_SIOCDRARP = SIOCDRARP;
   unsigned IOCTL_SIOCGARP = SIOCGARP;
   unsigned IOCTL_SIOCGIFENCAP = SIOCGIFENCAP;
@@ -667,6 +639,8 @@ namespace __sanitizer {
 #if SANITIZER_LINUX || SANITIZER_FREEBSD
   unsigned IOCTL_MTIOCGET = MTIOCGET;
   unsigned IOCTL_MTIOCTOP = MTIOCTOP;
+  unsigned IOCTL_SIOCADDRT = SIOCADDRT;
+  unsigned IOCTL_SIOCDELRT = SIOCDELRT;
   unsigned IOCTL_SNDCTL_DSP_GETBLKSIZE = SNDCTL_DSP_GETBLKSIZE;
   unsigned IOCTL_SNDCTL_DSP_GETFMTS = SNDCTL_DSP_GETFMTS;
   unsigned IOCTL_SNDCTL_DSP_NONBLOCK = SNDCTL_DSP_NONBLOCK;
@@ -1019,12 +993,8 @@ CHECK_SIZE_AND_OFFSET(__sysctl_args, newlen);
 
 CHECK_TYPE_SIZE(__kernel_uid_t);
 CHECK_TYPE_SIZE(__kernel_gid_t);
-
-#if SANITIZER_USES_UID16_SYSCALLS
 CHECK_TYPE_SIZE(__kernel_old_uid_t);
 CHECK_TYPE_SIZE(__kernel_old_gid_t);
-#endif
-
 CHECK_TYPE_SIZE(__kernel_off_t);
 CHECK_TYPE_SIZE(__kernel_loff_t);
 CHECK_TYPE_SIZE(__kernel_fd_set);
@@ -1075,13 +1045,7 @@ CHECK_SIZE_AND_OFFSET(ipc_perm, uid);
 CHECK_SIZE_AND_OFFSET(ipc_perm, gid);
 CHECK_SIZE_AND_OFFSET(ipc_perm, cuid);
 CHECK_SIZE_AND_OFFSET(ipc_perm, cgid);
-#ifndef __GLIBC_PREREQ
-#define __GLIBC_PREREQ(x, y) 0
-#endif
-#if !defined(__aarch64__) || !SANITIZER_LINUX || __GLIBC_PREREQ (2, 21)
-/* On aarch64 glibc 2.20 and earlier provided incorrect mode field.  */
 CHECK_SIZE_AND_OFFSET(ipc_perm, mode);
-#endif
 
 CHECK_TYPE_SIZE(shmid_ds);
 CHECK_SIZE_AND_OFFSET(shmid_ds, shm_perm);
@@ -1163,7 +1127,7 @@ CHECK_SIZE_AND_OFFSET(group, gr_passwd);
 CHECK_SIZE_AND_OFFSET(group, gr_gid);
 CHECK_SIZE_AND_OFFSET(group, gr_mem);
 
-#if HAVE_RPC_XDR_H || HAVE_TIRPC_RPC_XDR_H
+#if SANITIZER_LINUX && !SANITIZER_ANDROID
 CHECK_TYPE_SIZE(XDR);
 CHECK_SIZE_AND_OFFSET(XDR, x_op);
 CHECK_SIZE_AND_OFFSET(XDR, x_ops);

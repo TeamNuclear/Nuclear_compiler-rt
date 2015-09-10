@@ -49,13 +49,10 @@ class Quarantine {
   }
 
   void Init(uptr size, uptr cache_size) {
-    atomic_store(&max_size_, size, memory_order_release);
-    atomic_store(&min_size_, size / 10 * 9,
-                 memory_order_release); // 90% of max size.
+    max_size_ = size;
+    min_size_ = size / 10 * 9;  // 90% of max size.
     max_cache_size_ = cache_size;
   }
-
-  uptr GetSize() const { return atomic_load(&max_size_, memory_order_acquire); }
 
   void Put(Cache *c, Callback cb, Node *ptr, uptr size) {
     c->Enqueue(cb, ptr, size);
@@ -68,15 +65,15 @@ class Quarantine {
       SpinMutexLock l(&cache_mutex_);
       cache_.Transfer(c);
     }
-    if (cache_.Size() > GetSize() && recycle_mutex_.TryLock())
+    if (cache_.Size() > max_size_ && recycle_mutex_.TryLock())
       Recycle(cb);
   }
 
  private:
   // Read-only data.
   char pad0_[kCacheLineSize];
-  atomic_uintptr_t max_size_;
-  atomic_uintptr_t min_size_;
+  uptr max_size_;
+  uptr min_size_;
   uptr max_cache_size_;
   char pad1_[kCacheLineSize];
   SpinMutex cache_mutex_;
@@ -86,10 +83,9 @@ class Quarantine {
 
   void NOINLINE Recycle(Callback cb) {
     Cache tmp;
-    uptr min_size = atomic_load(&min_size_, memory_order_acquire);
     {
       SpinMutexLock l(&cache_mutex_);
-      while (cache_.Size() > min_size) {
+      while (cache_.Size() > min_size_) {
         QuarantineBatch *b = cache_.DequeueBatch();
         tmp.EnqueueBatch(b);
       }
@@ -134,7 +130,6 @@ class QuarantineCache {
       size += sizeof(QuarantineBatch);  // Count the batch in Quarantine size.
     }
     QuarantineBatch *b = list_.back();
-    CHECK(b);
     b->batch[b->count++] = ptr;
     b->size += size;
     SizeAdd(size);
@@ -173,7 +168,6 @@ class QuarantineCache {
 
   NOINLINE QuarantineBatch* AllocBatch(Callback cb) {
     QuarantineBatch *b = (QuarantineBatch *)cb.Allocate(sizeof(*b));
-    CHECK(b);
     b->count = 0;
     b->size = 0;
     list_.push_back(b);

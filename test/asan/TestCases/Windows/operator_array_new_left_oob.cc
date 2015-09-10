@@ -10,8 +10,7 @@ int main() {
 //
 // CHECK: [[ADDR]] is located 1 bytes to the left of 42-byte region
 // CHECK-LABEL: allocated by thread T0 here:
-// FIXME: The 'operator new' frame should have [].
-// CHECK-NEXT: {{#0 .* operator new}}
-// CHECK-NEXT: {{#1 .* main .*operator_array_new_left_oob.cc}}:[[@LINE-10]]
+// CHECK-NEXT: {{#0 .* operator new}}[]
+// CHECK-NEXT: {{#1 .* main .*operator_array_new_left_oob.cc}}:[[@LINE-9]]
   delete [] buffer;
 }

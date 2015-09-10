@@ -10,7 +10,7 @@
 //
 // This file is a part of ThreadSanitizer (TSan), a race detector.
 //
-// Test utils, Linux and FreeBSD implementation.
+// Test utils, linux implementation.
 //===----------------------------------------------------------------------===//
 
 #include "sanitizer_common/sanitizer_atomic.h"
@@ -263,14 +263,9 @@ void ScopedThread::Impl::HandleEvent(Event *ev) {
       }
     }
     CHECK_NE(tsan_mop, 0);
-#if defined(__FreeBSD__)
-    const int ErrCode = ESOCKTNOSUPPORT;
-#else
-    const int ErrCode = ECHRNG;
-#endif
-    errno = ErrCode;
+    errno = ECHRNG;
     tsan_mop(ev->ptr);
-    CHECK_EQ(ErrCode, errno);  // In no case must errno be changed.
+    CHECK_EQ(errno, ECHRNG);  // In no case must errno be changed.
     break;
   }
   case Event::VPTR_UPDATE:

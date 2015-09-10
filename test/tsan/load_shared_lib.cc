@@ -7,39 +7,35 @@
 
 #ifdef BUILD_SO
 
-#include "test.h"
+#include <stddef.h>
+#include <unistd.h>
 
 int GLOB_SHARED = 0;
 
 extern "C"
-void init_so() {
-  barrier_init(&barrier, 2);
-}
-
-extern "C"
 void *write_from_so(void *unused) {
-  if (unused == 0)
-    barrier_wait(&barrier);
+  if (unused)
+    sleep(1);
   GLOB_SHARED++;
-  if (unused != 0)
-    barrier_wait(&barrier);
   return NULL;
 }
 
 #else  // BUILD_SO
 
-#include "test.h"
 #include <dlfcn.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stddef.h>
+#include <unistd.h>
+
 #include <string>
 
 int GLOB = 0;
 
 void *write_glob(void *unused) {
-  if (unused == 0)
-    barrier_wait(&barrier);
+  if (unused)
+    sleep(1);
   GLOB++;
-  if (unused != 0)
-    barrier_wait(&barrier);
   return NULL;
 }
 
@@ -52,7 +48,6 @@ void race_two_threads(void *(*access_callback)(void *unused)) {
 }
 
 int main(int argc, char *argv[]) {
-  barrier_init(&barrier, 2);
   std::string path = std::string(argv[0]) + std::string("-so.so");
   race_two_threads(write_glob);
   // CHECK: write_glob
@@ -61,9 +56,6 @@ int main(int argc, char *argv[]) {
     printf("error in dlopen(): %s\n", dlerror());
     return 1;
   }
-  void (*init_so)();
-  *(void **)&init_so = dlsym(lib, "init_so");
-  init_so();
   void *(*write_from_so)(void *unused);
   *(void **)&write_from_so = dlsym(lib, "write_from_so");
   race_two_threads(write_from_so);

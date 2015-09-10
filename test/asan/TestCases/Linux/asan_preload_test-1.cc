@@ -5,12 +5,10 @@
 // RUN: %clangxx %s %t.so -o %t
 //
 // RUN: %clangxx_asan -DBUILD_SO=1 -fPIC -shared %s -o %t.so
-// RUN: env LD_PRELOAD=%shared_libasan not %run %t 2>&1 | FileCheck %s
+// RUN: LD_PRELOAD=%shared_libasan not %run %t 2>&1 | FileCheck %s
 
 // REQUIRES: asan-dynamic-runtime
-
-// This way of setting LD_PRELOAD does not work with Android test runner.
-// REQUIRES: not-android
+// XFAIL: android
 
 #if BUILD_SO
 char dummy;

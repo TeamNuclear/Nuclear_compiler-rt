@@ -22,18 +22,13 @@ static const u64 kMagic2 = (kMagic1 << 8) | kMagic1;
 static const u64 kMagic4 = (kMagic2 << 16) | kMagic2;
 static const u64 kMagic8 = (kMagic4 << 32) | kMagic4;
 
-static const u64 kAllocaRedzoneSize = 32UL;
-static const u64 kAllocaRedzoneMask = 31UL;
-
 // For small size classes inline PoisonShadow for better performance.
 ALWAYS_INLINE void SetShadow(uptr ptr, uptr size, uptr class_id, u64 magic) {
   CHECK_EQ(SHADOW_SCALE, 3);  // This code expects SHADOW_SCALE=3.
   u64 *shadow = reinterpret_cast<u64*>(MemToShadow(ptr));
   if (class_id <= 6) {
-    for (uptr i = 0; i < (1U << class_id); i++) {
+    for (uptr i = 0; i < (1U << class_id); i++)
       shadow[i] = magic;
-      SanitizerBreakOptimization(0);  // Make sure this does not become memset.
-    }
   } else {
     // The size class is too big, it's cheaper to poison only size bytes.
     PoisonShadow(ptr, size, static_cast<u8>(magic));
@@ -63,7 +58,7 @@ FakeStack *FakeStack::Create(uptr stack_size_log) {
 
 void FakeStack::Destroy(int tid) {
   PoisonAll(0);
-  if (Verbosity() >= 2) {
+  if (common_flags()->verbosity >= 2) {
     InternalScopedString str(kNumberOfSizeClasses * 50);
     for (uptr class_id = 0; class_id < kNumberOfSizeClasses; class_id++)
       str.append("%zd: %zd/%zd; ", class_id, hint_position_[class_id],
@@ -195,19 +190,20 @@ static FakeStack *GetFakeStackFast() {
   return GetFakeStack();
 }
 
-ALWAYS_INLINE uptr OnMalloc(uptr class_id, uptr size) {
+ALWAYS_INLINE uptr OnMalloc(uptr class_id, uptr size, uptr real_stack) {
   FakeStack *fs = GetFakeStackFast();
-  if (!fs) return 0;
-  uptr local_stack;
-  uptr real_stack = reinterpret_cast<uptr>(&local_stack);
+  if (!fs) return real_stack;
   FakeFrame *ff = fs->Allocate(fs->stack_size_log(), class_id, real_stack);
-  if (!ff) return 0;  // Out of fake stack.
+  if (!ff)
+    return real_stack;  // Out of fake stack, return the real one.
   uptr ptr = reinterpret_cast<uptr>(ff);
   SetShadow(ptr, size, class_id, 0);
   return ptr;
 }
 
-ALWAYS_INLINE void OnFree(uptr ptr, uptr class_id, uptr size) {
+ALWAYS_INLINE void OnFree(uptr ptr, uptr class_id, uptr size, uptr real_stack) {
+  if (ptr == real_stack)
+    return;
   FakeStack::Deallocate(ptr, class_id);
   SetShadow(ptr, size, class_id, kMagic8);
 }
@@ -218,12 +214,12 @@ ALWAYS_INLINE void OnFree(uptr ptr, uptr class_id, uptr size) {
 using namespace __asan;
 #define DEFINE_STACK_MALLOC_FREE_WITH_CLASS_ID(class_id)                       \
   extern "C" SANITIZER_INTERFACE_ATTRIBUTE uptr                                \
-      __asan_stack_malloc_##class_id(uptr size) {                              \
-    return OnMalloc(class_id, size);                                           \
+  __asan_stack_malloc_##class_id(uptr size, uptr real_stack) {                 \
+    return OnMalloc(class_id, size, real_stack);                               \
   }                                                                            \
   extern "C" SANITIZER_INTERFACE_ATTRIBUTE void __asan_stack_free_##class_id(  \
-      uptr ptr, uptr size) {                                                   \
-    OnFree(ptr, class_id, size);                                               \
+      uptr ptr, uptr size, uptr real_stack) {                                  \
+    OnFree(ptr, class_id, size, real_stack);                                   \
   }
 
 DEFINE_STACK_MALLOC_FREE_WITH_CLASS_ID(0)
@@ -255,25 +251,5 @@ void *__asan_addr_is_in_fake_stack(void *fake_stack, void *addr, void **beg,
   if (beg) *beg = reinterpret_cast<void*>(frame_beg);
   if (end) *end = reinterpret_cast<void*>(frame_end);
   return reinterpret_cast<void*>(frame->real_stack);
-}
-
-SANITIZER_INTERFACE_ATTRIBUTE
-void __asan_alloca_poison(uptr addr, uptr size) {
-  uptr LeftRedzoneAddr = addr - kAllocaRedzoneSize;
-  uptr PartialRzAddr = addr + size;
-  uptr RightRzAddr = (PartialRzAddr + kAllocaRedzoneMask) & ~kAllocaRedzoneMask;
-  uptr PartialRzAligned = PartialRzAddr & ~(SHADOW_GRANULARITY - 1);
-  FastPoisonShadow(LeftRedzoneAddr, kAllocaRedzoneSize, kAsanAllocaLeftMagic);
-  FastPoisonShadowPartialRightRedzone(
-      PartialRzAligned, PartialRzAddr % SHADOW_GRANULARITY,
-      RightRzAddr - PartialRzAligned, kAsanAllocaRightMagic);
-  FastPoisonShadow(RightRzAddr, kAllocaRedzoneSize, kAsanAllocaRightMagic);
-}
-
-SANITIZER_INTERFACE_ATTRIBUTE
-void __asan_allocas_unpoison(uptr top, uptr bottom) {
-  if ((!top) || (top > bottom)) return;
-  REAL(memset)(reinterpret_cast<void*>(MemToShadow(top)), 0,
-               (bottom - top) / SHADOW_GRANULARITY);
 }
 }  // extern "C"

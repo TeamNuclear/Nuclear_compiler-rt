@@ -12,8 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ubsan_platform.h"
-#if CAN_SANITIZE_UB
 #include "ubsan_value.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_libc.h"
@@ -83,13 +81,7 @@ FloatMax Value::getFloatValue() const {
 #endif
       case 32: {
         float Value;
-#if defined(__BIG_ENDIAN__)
-       // For big endian the float value is in the second 4 bytes
-       //  instead of the first 4 bytes.
-       internal_memcpy(&Value, ((const char*)&Val)+4, 4);
-#else 
-       internal_memcpy(&Value, &Val, 4);
-#endif
+        internal_memcpy(&Value, &Val, 4);
         return Value;
       }
       case 64: {
@@ -108,5 +100,3 @@ FloatMax Value::getFloatValue() const {
   }
   UNREACHABLE("unexpected floating point bit width");
 }
-
-#endif  // CAN_SANITIZE_UB
