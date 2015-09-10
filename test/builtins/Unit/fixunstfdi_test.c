@@ -11,11 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <stdio.h>
-
 #if _ARCH_PPC
 
 #include "int_lib.h"
+#include <stdio.h>
 
 // Returns: convert a to a unsigned long long, rounding toward zero.
 //          Negative values all become zero.
@@ -25,7 +24,7 @@
 //             value in long double is representable in du_int or is negative 
 //                 (no range checking performed)
 
-COMPILER_RT_ABI du_int __fixunstfdi(long double a);
+du_int __fixunstfdi(long double a);
 
 int test__fixunstfdi(long double a, du_int expected)
 {

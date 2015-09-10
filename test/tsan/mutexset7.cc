@@ -1,11 +1,13 @@
 // RUN: %clangxx_tsan -O1 %s -o %t && %deflake %run %t | FileCheck %s
-#include "test.h"
+#include <pthread.h>
+#include <stdio.h>
+#include <unistd.h>
 
 int Global;
 __thread int huge[1024*1024];
 
 void *Thread1(void *x) {
-  barrier_wait(&barrier);
+  sleep(1);
   Global++;
   return NULL;
 }
@@ -18,12 +20,10 @@ void *Thread2(void *x) {
   pthread_mutex_unlock(mtx);
   pthread_mutex_destroy(mtx);
   delete mtx;
-  barrier_wait(&barrier);
   return NULL;
 }
 
 int main() {
-  barrier_init(&barrier, 2);
   pthread_t t[2];
   pthread_create(&t[0], NULL, Thread1, NULL);
   pthread_create(&t[1], NULL, Thread2, NULL);

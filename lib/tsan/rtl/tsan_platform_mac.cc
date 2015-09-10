@@ -50,34 +50,48 @@ void FlushShadowMemory() {
 void WriteMemoryProfile(char *buf, uptr buf_size, uptr nthread, uptr nlive) {
 }
 
-#ifndef SANITIZER_GO
+uptr GetRSS() {
+  return 0;
+}
+
+#ifndef TSAN_GO
 void InitializeShadowMemory() {
-  uptr shadow = (uptr)MmapFixedNoReserve(kShadowBeg,
-    kShadowEnd - kShadowBeg);
-  if (shadow != kShadowBeg) {
+  uptr shadow = (uptr)MmapFixedNoReserve(kLinuxShadowBeg,
+    kLinuxShadowEnd - kLinuxShadowBeg);
+  if (shadow != kLinuxShadowBeg) {
     Printf("FATAL: ThreadSanitizer can not mmap the shadow memory\n");
     Printf("FATAL: Make sure to compile with -fPIE and "
            "to link with -pie.\n");
     Die();
   }
-  if (common_flags()->use_madv_dontdump)
-    DontDumpShadowMemory(kShadowBeg, kShadowEnd - kShadowBeg);
-  DPrintf("kShadow %zx-%zx (%zuGB)\n",
-      kShadowBeg, kShadowEnd,
-      (kShadowEnd - kShadowBeg) >> 30);
-  DPrintf("kAppMem %zx-%zx (%zuGB)\n",
-      kAppMemBeg, kAppMemEnd,
-      (kAppMemEnd - kAppMemBeg) >> 30);
+  DPrintf("kLinuxShadow %zx-%zx (%zuGB)\n",
+      kLinuxShadowBeg, kLinuxShadowEnd,
+      (kLinuxShadowEnd - kLinuxShadowBeg) >> 30);
+  DPrintf("kLinuxAppMem %zx-%zx (%zuGB)\n",
+      kLinuxAppMemBeg, kLinuxAppMemEnd,
+      (kLinuxAppMemEnd - kLinuxAppMemBeg) >> 30);
 }
 #endif
 
-void InitializePlatform() {
-  DisableCoreDumperIfNecessary();
+const char *InitializePlatform() {
+  void *p = 0;
+  if (sizeof(p) == 8) {
+    // Disable core dumps, dumping of 16TB usually takes a bit long.
+    // The following magic is to prevent clang from replacing it with memset.
+    volatile rlimit lim;
+    lim.rlim_cur = 0;
+    lim.rlim_max = 0;
+    setrlimit(RLIMIT_CORE, (rlimit*)&lim);
+  }
+
+  return GetEnv(kTsanOptionsEnv);
 }
 
-#ifndef SANITIZER_GO
-// Note: this function runs with async signals enabled,
-// so it must not touch any tsan state.
+void FinalizePlatform() {
+  fflush(0);
+}
+
+#ifndef TSAN_GO
 int call_pthread_cancel_with_cleanup(int(*fn)(void *c, void *m,
     void *abstime), void *c, void *m, void *abstime,
     void(*cleanup)(void *arg), void *arg) {

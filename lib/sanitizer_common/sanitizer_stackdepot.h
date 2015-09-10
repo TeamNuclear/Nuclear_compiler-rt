@@ -15,7 +15,6 @@
 
 #include "sanitizer_common.h"
 #include "sanitizer_internal_defs.h"
-#include "sanitizer_stacktrace.h"
 
 namespace __sanitizer {
 
@@ -29,18 +28,17 @@ struct StackDepotHandle {
   u32 id();
   int use_count();
   void inc_use_count_unsafe();
+  uptr size();
+  uptr *stack();
 };
 
 const int kStackDepotMaxUseCount = 1U << 20;
 
 StackDepotStats *StackDepotGetStats();
-u32 StackDepotPut(StackTrace stack);
-StackDepotHandle StackDepotPut_WithHandle(StackTrace stack);
+u32 StackDepotPut(const uptr *stack, uptr size);
+StackDepotHandle StackDepotPut_WithHandle(const uptr *stack, uptr size);
 // Retrieves a stored stack trace by the id.
-StackTrace StackDepotGet(u32 id);
-
-void StackDepotLockAll();
-void StackDepotUnlockAll();
+const uptr *StackDepotGet(u32 id, uptr *size);
 
 // Instantiating this class creates a snapshot of StackDepot which can be
 // efficiently queried with StackDepotGet(). You can use it concurrently with
@@ -49,7 +47,7 @@ void StackDepotUnlockAll();
 class StackDepotReverseMap {
  public:
   StackDepotReverseMap();
-  StackTrace Get(u32 id);
+  const uptr *Get(u32 id, uptr *size);
 
  private:
   struct IdDescPair {

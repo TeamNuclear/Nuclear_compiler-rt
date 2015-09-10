@@ -11,9 +11,8 @@ ModuleName := ubsan
 SubDirs :=
 
 Sources := $(foreach file,$(wildcard $(Dir)/*.cc),$(notdir $(file)))
-StandaloneSources := ubsan_init_standalone.cc
 CXXSources := ubsan_type_hash.cc ubsan_handlers_cxx.cc
-CSources := $(filter-out $(StandaloneSources),$(filter-out $(CXXSources),$(Sources)))
+CSources := $(filter-out $(CXXSources),$(Sources))
 ObjNames := $(Sources:%.cc=%.o)
 
 Implementation := Generic
@@ -25,4 +24,3 @@ Dependencies += $(wildcard $(Dir)/../sanitizer_common/*.h)
 # Define a convenience variable for all the ubsan functions.
 UbsanFunctions := $(CSources:%.cc=%)
 UbsanCXXFunctions := $(CXXSources:%.cc=%)
-UbsanStandaloneFunctions := $(StandaloneSources:%.cc=%)

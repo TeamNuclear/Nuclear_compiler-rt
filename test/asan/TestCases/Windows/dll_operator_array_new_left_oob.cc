@@ -13,10 +13,10 @@ int test_function() {
 //
 // CHECK: [[ADDR]] is located 1 bytes to the left of 42-byte region
 // CHECK-LABEL: allocated by thread T0 here:
-// FIXME: Should get rid of the malloc/free frames called from the inside of
-// operator new/delete in DLLs when using -MT CRT.
-// FIXME: The 'operator new' frame should have [].
-// CHECK:        operator new
+// FIXME: should get rid of the malloc/free frames called from the inside of
+// operator new/delete in DLLs.  Also, the operator new frame should have [].
+// CHECK-NEXT:   malloc
+// CHECK-NEXT:   operator new
 // CHECK-NEXT:   test_function {{.*}}dll_operator_array_new_left_oob.cc:[[@LINE-13]]
 // CHECK-NEXT:   main {{.*}}dll_host.cc
 // CHECK-LABEL: SUMMARY

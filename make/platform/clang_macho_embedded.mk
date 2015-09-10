@@ -156,7 +156,6 @@ COMMON_FUNCTIONS := \
 	divsf3 \
 	divsi3 \
 	extendsfdf2 \
-	extendhfsf2 \
 	ffssi2 \
 	fixdfsi \
 	fixsfsi \
@@ -173,19 +172,11 @@ COMMON_FUNCTIONS := \
 	negsf2 \
 	subdf3 \
 	subsf3 \
-	truncdfhf2 \
 	truncdfsf2 \
-	truncsfhf2 \
 	udivsi3 \
 	umodsi3 \
 	unorddf2 \
-	unordsf2 \
-	atomic_flag_clear \
-	atomic_flag_clear_explicit \
-	atomic_flag_test_and_set \
-	atomic_flag_test_and_set_explicit \
-	atomic_signal_fence \
-	atomic_thread_fence
+	unordsf2
 
 ARM_FUNCTIONS := \
 	aeabi_cdcmpeq \

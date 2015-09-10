@@ -1,6 +1,9 @@
 // RUN: %clangxx_tsan -O1 %s -o %t && %deflake %run %t | FileCheck %s
-#include "test.h"
+#include <pthread.h>
+#include <stddef.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 char *data = new char[10];
 char *data1 = new char[10];
@@ -9,19 +12,17 @@ char *data2 = new char[10];
 void *Thread1(void *x) {
   static volatile int size = 1;
   memcpy(data+5, data1, size);
-  barrier_wait(&barrier);
   return NULL;
 }
 
 void *Thread2(void *x) {
   static volatile int size = 4;
-  barrier_wait(&barrier);
+  sleep(1);
   memcpy(data+3, data2, size);
   return NULL;
 }
 
 int main() {
-  barrier_init(&barrier, 2);
   fprintf(stderr, "addr=%p\n", &data[5]);
   pthread_t t[2];
   pthread_create(&t[0], NULL, Thread1, NULL);

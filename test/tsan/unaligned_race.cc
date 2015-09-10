@@ -1,6 +1,9 @@
 // RUN: %clangxx_tsan -O1 %s -o %t && %deflake %run %t | FileCheck %s
-#include "test.h"
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #define NOINLINE __attribute__((noinline))
 
@@ -120,17 +123,15 @@ NOINLINE void Test(bool main) {
 
 void *Thread(void *p) {
   (void)p;
-  barrier_wait(&barrier);
+  sleep(1);
   Test(false);
   return 0;
 }
 
 int main() {
-  barrier_init(&barrier, 2);
   pthread_t th;
   pthread_create(&th, 0, Thread, 0);
   Test(true);
-  barrier_wait(&barrier);
   pthread_join(th, 0);
 }
 

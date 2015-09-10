@@ -90,9 +90,9 @@ INTERCEPTOR(void, malloc_set_zone_name, malloc_zone_t *zone, const char *name) {
   ENSURE_ASAN_INITED();
   // Allocate |strlen("asan-") + 1 + internal_strlen(name)| bytes.
   size_t buflen = 6 + (name ? internal_strlen(name) : 0);
-  InternalScopedString new_name(buflen);
+  InternalScopedBuffer<char> new_name(buflen);
   if (name && zone->introspect == asan_zone.introspect) {
-    new_name.append("asan-%s", name);
+    internal_snprintf(new_name.data(), buflen, "asan-%s", name);
     name = new_name.data();
   }
 
@@ -152,17 +152,13 @@ INTERCEPTOR(int, posix_memalign, void **memptr, size_t alignment, size_t size) {
 
 namespace {
 
-// TODO(glider): the __asan_mz_* functions should be united with the Linux
-// wrappers, as they are basically copied from there.
-extern "C"
-SANITIZER_INTERFACE_ATTRIBUTE
-size_t __asan_mz_size(malloc_zone_t* zone, const void* ptr) {
+// TODO(glider): the mz_* functions should be united with the Linux wrappers,
+// as they are basically copied from there.
+size_t mz_size(malloc_zone_t* zone, const void* ptr) {
   return asan_mz_size(ptr);
 }
 
-extern "C"
-SANITIZER_INTERFACE_ATTRIBUTE
-void *__asan_mz_malloc(malloc_zone_t *zone, uptr size) {
+void *mz_malloc(malloc_zone_t *zone, size_t size) {
   if (UNLIKELY(!asan_inited)) {
     CHECK(system_malloc_zone);
     return malloc_zone_malloc(system_malloc_zone, size);
@@ -171,9 +167,7 @@ void *__asan_mz_malloc(malloc_zone_t *zone, uptr size) {
   return asan_malloc(size, &stack);
 }
 
-extern "C"
-SANITIZER_INTERFACE_ATTRIBUTE
-void *__asan_mz_calloc(malloc_zone_t *zone, size_t nmemb, size_t size) {
+void *mz_calloc(malloc_zone_t *zone, size_t nmemb, size_t size) {
   if (UNLIKELY(!asan_inited)) {
     // Hack: dlsym calls calloc before REAL(calloc) is retrieved from dlsym.
     const size_t kCallocPoolSize = 1024;
@@ -189,9 +183,7 @@ void *__asan_mz_calloc(malloc_zone_t *zone, size_t nmemb, size_t size) {
   return asan_calloc(nmemb, size, &stack);
 }
 
-extern "C"
-SANITIZER_INTERFACE_ATTRIBUTE
-void *__asan_mz_valloc(malloc_zone_t *zone, size_t size) {
+void *mz_valloc(malloc_zone_t *zone, size_t size) {
   if (UNLIKELY(!asan_inited)) {
     CHECK(system_malloc_zone);
     return malloc_zone_valloc(system_malloc_zone, size);
@@ -218,15 +210,11 @@ void ALWAYS_INLINE free_common(void *context, void *ptr) {
 }
 
 // TODO(glider): the allocation callbacks need to be refactored.
-extern "C"
-SANITIZER_INTERFACE_ATTRIBUTE
-void __asan_mz_free(malloc_zone_t *zone, void *ptr) {
+void mz_free(malloc_zone_t *zone, void *ptr) {
   free_common(zone, ptr);
 }
 
-extern "C"
-SANITIZER_INTERFACE_ATTRIBUTE
-void *__asan_mz_realloc(malloc_zone_t *zone, void *ptr, size_t size) {
+void *mz_realloc(malloc_zone_t *zone, void *ptr, size_t size) {
   if (!ptr) {
     GET_STACK_TRACE_MALLOC;
     return asan_malloc(size, &stack);
@@ -245,16 +233,15 @@ void *__asan_mz_realloc(malloc_zone_t *zone, void *ptr, size_t size) {
   }
 }
 
-extern "C"
-SANITIZER_INTERFACE_ATTRIBUTE
-void __asan_mz_destroy(malloc_zone_t* zone) {
+void mz_destroy(malloc_zone_t* zone) {
   // A no-op -- we will not be destroyed!
-  Report("__asan_mz_destroy() called -- ignoring\n");
+  Report("mz_destroy() called -- ignoring\n");
 }
 
-extern "C"
-SANITIZER_INTERFACE_ATTRIBUTE
-void *__asan_mz_memalign(malloc_zone_t *zone, size_t align, size_t size) {
+  // from AvailabilityMacros.h
+#if defined(MAC_OS_X_VERSION_10_6) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+void *mz_memalign(malloc_zone_t *zone, size_t align, size_t size) {
   if (UNLIKELY(!asan_inited)) {
     CHECK(system_malloc_zone);
     return malloc_zone_memalign(system_malloc_zone, align, size);
@@ -265,11 +252,11 @@ void *__asan_mz_memalign(malloc_zone_t *zone, size_t align, size_t size) {
 
 // This function is currently unused, and we build with -Werror.
 #if 0
-void __asan_mz_free_definite_size(
-    malloc_zone_t* zone, void *ptr, size_t size) {
+void mz_free_definite_size(malloc_zone_t* zone, void *ptr, size_t size) {
   // TODO(glider): check that |size| is valid.
   UNIMPLEMENTED();
 }
+#endif
 #endif
 
 kern_return_t mi_enumerator(task_t task, void *,
@@ -312,10 +299,13 @@ void mi_statistics(malloc_zone_t *zone, malloc_statistics_t *stats) {
   internal_memcpy(stats, &malloc_stats, sizeof(malloc_statistics_t));
 }
 
+#if defined(MAC_OS_X_VERSION_10_6) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
 boolean_t mi_zone_locked(malloc_zone_t *zone) {
   // UNIMPLEMENTED();
   return false;
 }
+#endif
 
 }  // unnamed namespace
 
@@ -334,25 +324,32 @@ void ReplaceSystemMalloc() {
   asan_introspection.force_lock = &mi_force_lock;
   asan_introspection.force_unlock = &mi_force_unlock;
   asan_introspection.statistics = &mi_statistics;
-  asan_introspection.zone_locked = &mi_zone_locked;
 
   internal_memset(&asan_zone, 0, sizeof(malloc_zone_t));
 
-  // Use version 6 for OSX >= 10.6.
-  asan_zone.version = 6;
+  // Start with a version 4 zone which is used for OS X 10.4 and 10.5.
+  asan_zone.version = 4;
   asan_zone.zone_name = "asan";
-  asan_zone.size = &__asan_mz_size;
-  asan_zone.malloc = &__asan_mz_malloc;
-  asan_zone.calloc = &__asan_mz_calloc;
-  asan_zone.valloc = &__asan_mz_valloc;
-  asan_zone.free = &__asan_mz_free;
-  asan_zone.realloc = &__asan_mz_realloc;
-  asan_zone.destroy = &__asan_mz_destroy;
+  asan_zone.size = &mz_size;
+  asan_zone.malloc = &mz_malloc;
+  asan_zone.calloc = &mz_calloc;
+  asan_zone.valloc = &mz_valloc;
+  asan_zone.free = &mz_free;
+  asan_zone.realloc = &mz_realloc;
+  asan_zone.destroy = &mz_destroy;
   asan_zone.batch_malloc = 0;
   asan_zone.batch_free = 0;
-  asan_zone.free_definite_size = 0;
-  asan_zone.memalign = &__asan_mz_memalign;
   asan_zone.introspect = &asan_introspection;
+
+  // from AvailabilityMacros.h
+#if defined(MAC_OS_X_VERSION_10_6) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+  // Switch to version 6 on OSX 10.6 to support memalign.
+  asan_zone.version = 6;
+  asan_zone.free_definite_size = 0;
+  asan_zone.memalign = &mz_memalign;
+  asan_introspection.zone_locked = &mi_zone_locked;
+#endif
 
   // Register the ASan zone.
   malloc_zone_register(&asan_zone);

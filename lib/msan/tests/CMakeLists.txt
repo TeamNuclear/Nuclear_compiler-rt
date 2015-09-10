@@ -15,11 +15,12 @@ set(MSAN_UNITTEST_SOURCES msan_test.cc msan_test_main.cc)
 set(MSAN_LOADABLE_SOURCE msan_loadable.cc)
 set(MSAN_UNITTEST_HEADERS
   msan_test_config.h
+  msandr_test_so.h
   ../../../include/sanitizer/msan_interface.h
 )
+set(MSANDR_UNITTEST_SOURCE msandr_test_so.cc)
 set(MSAN_UNITTEST_COMMON_CFLAGS
   -I${COMPILER_RT_LIBCXX_PATH}/include
-  ${COMPILER_RT_TEST_CFLAGS}
   ${COMPILER_RT_GTEST_CFLAGS}
   -I${COMPILER_RT_SOURCE_DIR}/include
   -I${COMPILER_RT_SOURCE_DIR}/lib
@@ -33,7 +34,6 @@ set(MSAN_UNITTEST_COMMON_CFLAGS
   -Wno-deprecated-declarations
   -Wno-unused-variable
   -Wno-zero-length-array
-  -Wno-uninitialized
   -Werror=sign-compare
 )
 set(MSAN_UNITTEST_INSTRUMENTED_CFLAGS
@@ -48,7 +48,7 @@ set(MSAN_UNITTEST_LINK_FLAGS
   -lstdc++
 )
 
-append_list_if(COMPILER_RT_HAS_LIBDL -ldl MSAN_UNITTEST_LINK_FLAGS)
+append_if(COMPILER_RT_HAS_LIBDL -ldl MSAN_UNITTEST_LINK_FLAGS)
 set(MSAN_LOADABLE_LINK_FLAGS
   -fsanitize=memory
   -shared
@@ -113,13 +113,25 @@ macro(add_msan_tests_for_arch arch kind)
   msan_compile(MSAN_INST_LOADABLE_OBJECTS ${MSAN_LOADABLE_SOURCE} ${arch} "${kind}"
                ${MSAN_UNITTEST_INSTRUMENTED_CFLAGS} ${ARGN})
 
+  # Uninstrumented shared object for MSanDR tests.
+  set(MSANDR_TEST_OBJECTS)
+  msan_compile(MSANDR_TEST_OBJECTS ${MSANDR_UNITTEST_SOURCE} ${arch} "${kind}"
+               ${MSAN_UNITTEST_COMMON_CFLAGS})
+
   # Instrumented loadable library tests.
   set(MSAN_LOADABLE_SO)
   msan_link_shared(MSAN_LOADABLE_SO "libmsan_loadable" ${arch} "${kind}"
                    OBJECTS ${MSAN_INST_LOADABLE_OBJECTS}
                    DEPS ${MSAN_INST_LOADABLE_OBJECTS})
 
-  set(MSAN_TEST_OBJECTS ${MSAN_INST_TEST_OBJECTS} ${MSAN_INST_GTEST})
+  # Uninstrumented shared library tests.
+  set(MSANDR_TEST_SO)
+  msan_link_shared(MSANDR_TEST_SO "libmsandr_test" ${arch} "${kind}"
+                   OBJECTS ${MSANDR_TEST_OBJECTS}
+                   DEPS ${MSANDR_TEST_OBJECTS})
+
+  set(MSAN_TEST_OBJECTS ${MSAN_INST_TEST_OBJECTS} ${MSAN_INST_GTEST}
+                        ${MSANDR_TEST_SO})
   set(MSAN_TEST_DEPS ${MSAN_TEST_OBJECTS} libcxx_msan${kind}
                      ${MSAN_LOADABLE_SO})
   if(NOT COMPILER_RT_STANDALONE_BUILD)
@@ -137,9 +149,9 @@ endmacro()
 
 # We should only build MSan unit tests if we can build instrumented libcxx.
 if(COMPILER_RT_CAN_EXECUTE_TESTS AND COMPILER_RT_HAS_LIBCXX_SOURCES)
-  foreach(arch ${MSAN_SUPPORTED_ARCH})
-    add_msan_tests_for_arch(${arch} "")
-    add_msan_tests_for_arch(${arch} "-with-call"
+  if(CAN_TARGET_x86_64)
+    add_msan_tests_for_arch(x86_64 "")
+    add_msan_tests_for_arch(x86_64 "-with-call"
                             -mllvm -msan-instrumentation-with-call-threshold=0)
-  endforeach()
+  endif()
 endif()

@@ -32,9 +32,6 @@ class StackDepotBase {
 
   StackDepotStats *GetStats() { return &stats; }
 
-  void LockAll();
-  void UnlockAll();
-
  private:
   static Node *find(Node *s, args_type args, u32 hash);
   static Node *lock(atomic_uintptr_t *p);
@@ -97,8 +94,8 @@ typename StackDepotBase<Node, kReservedBits, kTabSizeLog>::handle_type
 StackDepotBase<Node, kReservedBits, kTabSizeLog>::Put(args_type args,
                                                       bool *inserted) {
   if (inserted) *inserted = false;
-  if (!Node::is_valid(args)) return handle_type();
-  uptr h = Node::hash(args);
+  if (!args.is_valid()) return handle_type();
+  uptr h = args.hash();
   atomic_uintptr_t *p = &tab[h % kTabSize];
   uptr v = atomic_load(p, memory_order_consume);
   Node *s = (Node *)(v & ~1);
@@ -154,22 +151,6 @@ StackDepotBase<Node, kReservedBits, kTabSizeLog>::Get(u32 id) {
     }
   }
   return args_type();
-}
-
-template <class Node, int kReservedBits, int kTabSizeLog>
-void StackDepotBase<Node, kReservedBits, kTabSizeLog>::LockAll() {
-  for (int i = 0; i < kTabSize; ++i) {
-    lock(&tab[i]);
-  }
-}
-
-template <class Node, int kReservedBits, int kTabSizeLog>
-void StackDepotBase<Node, kReservedBits, kTabSizeLog>::UnlockAll() {
-  for (int i = 0; i < kTabSize; ++i) {
-    atomic_uintptr_t *p = &tab[i];
-    uptr s = atomic_load(p, memory_order_relaxed);
-    unlock(p, (Node *)(s & ~1UL));
-  }
 }
 
 }  // namespace __sanitizer

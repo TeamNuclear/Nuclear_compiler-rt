@@ -64,7 +64,7 @@ class TestData {
 
 const int kThreads = 8;
 const int kWriteRate = 1024;
-#if SANITIZER_DEBUG
+#if TSAN_DEBUG
 const int kIters = 16*1024;
 #else
 const int kIters = 64*1024;

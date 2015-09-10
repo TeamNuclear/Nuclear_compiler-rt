@@ -7,7 +7,6 @@
 
 #include <assert.h>
 #include <pthread.h>
-#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -19,7 +18,7 @@ void *stacks_thread_func(void *arg) {
   fflush(stderr);
   __sync_fetch_and_xor(sync, 1);
   while (true)
-    sched_yield();
+    pthread_yield();
 }
 
 int main() {
@@ -28,7 +27,7 @@ int main() {
   int res = pthread_create(&thread_id, 0, stacks_thread_func, &sync);
   assert(res == 0);
   while (!__sync_fetch_and_xor(&sync, 0))
-    sched_yield();
+    pthread_yield();
   return 0;
 }
 // CHECK: Test alloc: [[ADDR:.*]].

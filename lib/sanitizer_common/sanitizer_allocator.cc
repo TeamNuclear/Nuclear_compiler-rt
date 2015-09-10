@@ -14,6 +14,7 @@
 #include "sanitizer_allocator.h"
 #include "sanitizer_allocator_internal.h"
 #include "sanitizer_common.h"
+#include "sanitizer_flags.h"
 
 namespace __sanitizer {
 
@@ -60,7 +61,7 @@ InternalAllocator *internal_allocator() {
     SpinMutexLock l(&internal_alloc_init_mu);
     if (atomic_load(&internal_allocator_initialized, memory_order_relaxed) ==
         0) {
-      internal_allocator_instance->Init(/* may_return_null*/ false);
+      internal_allocator_instance->Init();
       atomic_store(&internal_allocator_initialized, 1, memory_order_release);
     }
   }
@@ -139,12 +140,14 @@ bool CallocShouldReturnNullDueToOverflow(uptr size, uptr n) {
   return (max / size) < n;
 }
 
-void NORETURN ReportAllocatorCannotReturnNull() {
+void *AllocatorReturnNull() {
+  if (common_flags()->allocator_may_return_null)
+    return 0;
   Report("%s's allocator is terminating the process instead of returning 0\n",
          SanitizerToolName);
   Report("If you don't like this behavior set allocator_may_return_null=1\n");
   CHECK(0);
-  Die();
+  return 0;
 }
 
 }  // namespace __sanitizer

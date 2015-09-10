@@ -1,21 +1,21 @@
 // RUN: %clang_tsan -O1 %s -o %t && TSAN_OPTIONS="$TSAN_OPTIONS halt_on_error=1" %deflake %run %t | FileCheck %s
-#include "test.h"
+#include <pthread.h>
+#include <stdio.h>
+#include <unistd.h>
 
 int X;
 
 void *Thread(void *x) {
-  barrier_wait(&barrier);
+  sleep(1);
   X = 42;
   return 0;
 }
 
 int main() {
-  barrier_init(&barrier, 2);
   fprintf(stderr, "BEFORE\n");
   pthread_t t;
   pthread_create(&t, 0, Thread, 0);
   X = 43;
-  barrier_wait(&barrier);
   pthread_join(t, 0);
   fprintf(stderr, "AFTER\n");
   return 0;

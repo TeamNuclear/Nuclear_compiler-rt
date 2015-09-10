@@ -65,7 +65,6 @@ class DenseSlabAlloc {
   }
 
   void Free(Cache *c, IndexT idx) {
-    DCHECK_NE(idx, 0);
     if (c->pos == Cache::kSize)
       Drain(c);
     c->cache[c->pos++] = idx;

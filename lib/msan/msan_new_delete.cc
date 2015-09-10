@@ -13,11 +13,18 @@
 //===----------------------------------------------------------------------===//
 
 #include "msan.h"
-#include "interception/interception.h"
+#include "sanitizer_common/sanitizer_interception.h"
 
 #if MSAN_REPLACE_OPERATORS_NEW_AND_DELETE
 
 #include <stddef.h>
+
+namespace __msan {
+// This function is a no-op. We need it to make sure that object file
+// with our replacements will actually be loaded from static MSan
+// run-time library at link-time.
+void ReplaceOperatorsNewAndDelete() { }
+}
 
 using namespace __msan;  // NOLINT
 

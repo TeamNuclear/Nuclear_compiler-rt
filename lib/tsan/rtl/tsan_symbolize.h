@@ -18,13 +18,9 @@
 
 namespace __tsan {
 
-// Denotes fake PC values that come from JIT/JAVA/etc.
-// For such PC values __tsan_symbolize_external() will be called.
-const uptr kExternalPCBit = 1ULL << 60;
-
 void EnterSymbolizer();
 void ExitSymbolizer();
-SymbolizedStack *SymbolizeCode(uptr addr);
+ReportStack *SymbolizeCode(uptr addr);
 ReportLocation *SymbolizeData(uptr addr);
 void SymbolizeFlush();
 

@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Guess path to LLVM_CHECKOUT if not provided
-if [ "${LLVM_CHECKOUT}" = "" ]; then
+if [ "${LLVM_CHECKOUT}" == "" ]; then
   LLVM_CHECKOUT="${SCRIPT_DIR}/../../../../../"
 fi
 
@@ -17,6 +17,7 @@ fi
 
 # Filters
 # TODO: remove some of these filters
+LLVM_LINT_FILTER=-,+whitespace
 COMMON_LINT_FILTER=-build/include,-build/header_guard,-legal/copyright,-whitespace/comments,-readability/casting,\
 -build/namespaces
 ASAN_RTL_LINT_FILTER=${COMMON_LINT_FILTER},-runtime/int
@@ -28,17 +29,10 @@ TSAN_LIT_TEST_LINT_FILTER=${TSAN_TEST_LINT_FILTER},-whitespace/line_length
 MSAN_RTL_LINT_FILTER=${COMMON_LINT_FILTER}
 LSAN_RTL_LINT_FILTER=${COMMON_LINT_FILTER}
 LSAN_LIT_TEST_LINT_FILTER=${LSAN_RTL_LINT_FILTER},-whitespace/line_length
-DFSAN_RTL_LINT_FILTER=${COMMON_LINT_FILTER},-runtime/int,-runtime/printf,-runtime/references,-readability/function
+DFSAN_RTL_LINT_FILTER=${COMMON_LINT_FILTER},-runtime/int,-runtime/printf,-runtime/references
 COMMON_RTL_INC_LINT_FILTER=${COMMON_LINT_FILTER},-runtime/int,-runtime/sizeof,-runtime/printf,-readability/fn_size
 SANITIZER_INCLUDES_LINT_FILTER=${COMMON_LINT_FILTER},-runtime/int
-
-MKTEMP_DIR=$(mktemp -qd /tmp/check_lint.XXXXXXXXXX)
-MKTEMP="mktemp -q ${MKTEMP_DIR}/tmp.XXXXXXXXXX"
-cleanup() {
-  rm -rf $MKTEMP_DIR
-}
-trap cleanup EXIT
-
+MKTEMP="mktemp -q /tmp/tmp.XXXXXXXXXX"
 cd ${LLVM_CHECKOUT}
 
 EXITSTATUS=0
@@ -53,13 +47,16 @@ run_lint() {
     cat $TASK_LOG | grep -v "Done processing" | grep -v "Total errors found" \
       | grep -v "Skipping input" >> $ERROR_LOG
   fi
-  if [ "${SILENT}" != "1" ]; then
+  if [[ "${SILENT}" != "1" ]]; then
     cat $TASK_LOG
   fi
   ${LITLINT} "$@" 2>>$ERROR_LOG
 }
 
-if [ "${COMPILER_RT}" = "" ]; then
+run_lint ${LLVM_LINT_FILTER} --filter=${LLVM_LINT_FILTER} \
+  lib/Transforms/Instrumentation/*Sanitizer.cpp &
+
+if [ "${COMPILER_RT}" == "" ]; then
   COMPILER_RT=projects/compiler-rt
 fi
 LIT_TESTS=${COMPILER_RT}/test
@@ -69,47 +66,38 @@ run_lint ${SANITIZER_INCLUDES_LINT_FILTER} ${SANITIZER_INCLUDES}/*.h &
 
 # Sanitizer_common
 COMMON_RTL=${COMPILER_RT}/lib/sanitizer_common
-run_lint ${COMMON_RTL_INC_LINT_FILTER} ${COMMON_RTL}/*.cc \
-                                       ${COMMON_RTL}/*.h \
+run_lint ${COMMON_RTL_INC_LINT_FILTER} ${COMMON_RTL}/*.{cc,h} \
                                        ${COMMON_RTL}/tests/*.cc &
 
 # Interception
 INTERCEPTION=${COMPILER_RT}/lib/interception
-run_lint ${ASAN_RTL_LINT_FILTER} ${INTERCEPTION}/*.cc \
-                                 ${INTERCEPTION}/*.h &
+run_lint ${ASAN_RTL_LINT_FILTER} ${INTERCEPTION}/*.{cc,h} &
 
 # ASan
 ASAN_RTL=${COMPILER_RT}/lib/asan
-run_lint ${ASAN_RTL_LINT_FILTER} ${ASAN_RTL}/*.cc \
-                                 ${ASAN_RTL}/*.h &
-run_lint ${ASAN_TEST_LINT_FILTER} ${ASAN_RTL}/tests/*.cc \
-                                  ${ASAN_RTL}/tests/*.h &
+run_lint ${ASAN_RTL_LINT_FILTER} ${ASAN_RTL}/*.{cc,h} &
+run_lint ${ASAN_TEST_LINT_FILTER} ${ASAN_RTL}/tests/*.{cc,h} &
 run_lint ${ASAN_LIT_TEST_LINT_FILTER} ${LIT_TESTS}/asan/*/*.cc &
 
 # TSan
 TSAN_RTL=${COMPILER_RT}/lib/tsan
-run_lint ${TSAN_RTL_LINT_FILTER} ${TSAN_RTL}/rtl/*.cc \
-                                 ${TSAN_RTL}/rtl/*.h &
-run_lint ${TSAN_TEST_LINT_FILTER} ${TSAN_RTL}/tests/rtl/*.cc \
-                                  ${TSAN_RTL}/tests/rtl/*.h \
+run_lint ${TSAN_RTL_LINT_FILTER} ${TSAN_RTL}/rtl/*.{cc,h} &
+run_lint ${TSAN_TEST_LINT_FILTER} ${TSAN_RTL}/tests/rtl/*.{cc,h} \
                                   ${TSAN_RTL}/tests/unit/*.cc &
 run_lint ${TSAN_LIT_TEST_LINT_FILTER} ${LIT_TESTS}/tsan/*.cc &
 
 # MSan
 MSAN_RTL=${COMPILER_RT}/lib/msan
-run_lint ${MSAN_RTL_LINT_FILTER} ${MSAN_RTL}/*.cc \
-                                 ${MSAN_RTL}/*.h &
+run_lint ${MSAN_RTL_LINT_FILTER} ${MSAN_RTL}/*.{cc,h} &
 
 # LSan
 LSAN_RTL=${COMPILER_RT}/lib/lsan
-run_lint ${LSAN_RTL_LINT_FILTER} ${LSAN_RTL}/*.cc \
-                                 ${LSAN_RTL}/*.h &
+run_lint ${LSAN_RTL_LINT_FILTER} ${LSAN_RTL}/*.{cc,h}
 run_lint ${LSAN_LIT_TEST_LINT_FILTER} ${LIT_TESTS}/lsan/*/*.cc &
 
 # DFSan
 DFSAN_RTL=${COMPILER_RT}/lib/dfsan
-run_lint ${DFSAN_RTL_LINT_FILTER} ${DFSAN_RTL}/*.cc \
-                                  ${DFSAN_RTL}/*.h &
+run_lint ${DFSAN_RTL_LINT_FILTER} ${DFSAN_RTL}/*.{cc,h} &
 ${DFSAN_RTL}/scripts/check_custom_wrappers.sh >> $ERROR_LOG
 
 # Misc files
@@ -128,7 +116,7 @@ for temp in $TMPFILES; do
   rm -f $temp
 done
 
-if [ -s $ERROR_LOG ]; then
+if [[ -s $ERROR_LOG ]]; then
   cat $ERROR_LOG
   exit 1
 fi

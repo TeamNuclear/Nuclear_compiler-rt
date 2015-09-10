@@ -268,7 +268,7 @@ void RunMultipleEpochsTest() {
   }
   EXPECT_EQ(d.testOnlyGetEpoch(), 4 * d.size());
 
-#if !SANITIZER_DEBUG
+#if TSAN_DEBUG == 0
   // EXPECT_DEATH clones a thread with 4K stack,
   // which is overflown by tsan memory accesses functions in debug mode.
 

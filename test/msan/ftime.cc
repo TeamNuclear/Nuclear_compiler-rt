@@ -1,7 +1,4 @@
-// RUN: %clangxx_msan -O0 -g %s -o %t && %run %t
-
-// ftime() is deprecated on FreeBSD.
-// XFAIL: freebsd
+// RUN: %clangxx_msan -m64 -O0 -g %s -o %t && %run %t
 
 #include <assert.h>
 #include <sys/timeb.h>

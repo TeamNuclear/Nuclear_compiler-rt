@@ -1,8 +1,12 @@
 // RUN: %clang_tsan -O1 %s -o %t
 // RUN: %deflake %run %t | FileCheck %s --check-prefix=CHECK-NOZUPP
-// RUN: TSAN_OPTIONS="suppressions='%s.supp' print_suppressions=1" %run %t 2>&1 | FileCheck %s --check-prefix=CHECK-SUPP
+// RUN: TSAN_OPTIONS="suppressions=%s.supp print_suppressions=1" %run %t 2>&1 | FileCheck %s --check-prefix=CHECK-SUPP
 
-#include "test.h"
+#include <pthread.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stddef.h>
+#include <unistd.h>
 
 int *mem;
 pthread_mutex_t mtx;
@@ -11,12 +15,11 @@ void *Thread1(void *x) {
   pthread_mutex_lock(&mtx);
   free(mem);
   pthread_mutex_unlock(&mtx);
-  barrier_wait(&barrier);
   return NULL;
 }
 
 void *Thread2(void *x) {
-  barrier_wait(&barrier);
+  sleep(1);
   pthread_mutex_lock(&mtx);
   mem[0] = 42;
   pthread_mutex_unlock(&mtx);
@@ -24,7 +27,6 @@ void *Thread2(void *x) {
 }
 
 int main() {
-  barrier_init(&barrier, 2);
   mem = (int*)malloc(100);
   pthread_mutex_init(&mtx, 0);
   pthread_t t;

@@ -11,8 +11,7 @@ int main() {
 // CHECK:   {{#0 .* main .*operator_array_new_right_oob.cc}}:[[@LINE-3]]
 // CHECK: [[ADDR]] is located 0 bytes to the right of 42-byte region
 // CHECK: allocated by thread T0 here:
-// FIXME: The 'operator new' frame should have [].
-// CHECK:   {{#0 .* operator new}}
-// CHECK:   {{#1 .* main .*operator_array_new_right_oob.cc}}:[[@LINE-9]]
+// CHECK:   {{#0 .* operator new}}[]
+// CHECK:   {{#1 .* main .*operator_array_new_right_oob.cc}}:[[@LINE-8]]
   delete [] buffer;
 }

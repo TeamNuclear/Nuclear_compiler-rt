@@ -2,7 +2,6 @@
 // RUN: %clangxx -O0 -g %s -o %t && %run %t
 
 #include <assert.h>
-#include <errno.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
@@ -14,7 +13,7 @@ int main(void) {
   struct passwd *pwdres;
   char buf[10000];
   int res = getpwnam_r("no-such-user", &pwd, buf, sizeof(buf), &pwdres);
-  assert(res == 0 || res == ENOENT);
+  assert(res == 0);
   assert(pwdres == 0);
   return 0;
 }

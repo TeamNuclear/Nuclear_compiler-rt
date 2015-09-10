@@ -1,23 +1,22 @@
 // RUN: %clangxx_tsan -O1 %s -o %t && %deflake %run %t | FileCheck %s
-#include "test.h"
+#include <pthread.h>
+#include <stdio.h>
+#include <stddef.h>
+#include <unistd.h>
 
 int x;
 
 void *Thread(void *a) {
-  barrier_wait(&barrier);
+  sleep(1);
   x = 1;
   return 0;
 }
 
 int main() {
-  barrier_init(&barrier, 2);
-  fprintf(stderr, "addr2=");
-  print_address(&x);
-  fprintf(stderr, "\n");
+  fprintf(stderr, "addr2=%p\n", &x);
   pthread_t t;
   pthread_create(&t, 0, Thread, 0);
   x = 0;
-  barrier_wait(&barrier);
   pthread_join(t, 0);
 }
 

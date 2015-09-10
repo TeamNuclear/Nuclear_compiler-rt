@@ -7,9 +7,13 @@
 
 #ifdef __x86_64__
 
-CONST_SECTION
-
-	.balign 16
+#if defined(__APPLE__)
+	.literal4
+#elif defined(__ELF__)
+	.rodata
+#else
+	.section .rdata,"rd"
+#endif
 two:
 	.single 2.0
 

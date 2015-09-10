@@ -5,13 +5,12 @@ jptr varaddr;
 jptr varaddr2;
 
 void *Thread(void *p) {
-  barrier_wait(&barrier);
+  sleep(1);
   *(int*)varaddr2 = 42;
   return 0;
 }
 
 int main() {
-  barrier_init(&barrier, 2);
   int const kHeapSize = 1024 * 1024;
   jptr jheap = (jptr)malloc(kHeapSize + 8) + 8;
   __tsan_java_init(jheap, kHeapSize);
@@ -24,7 +23,6 @@ int main() {
   pthread_create(&th, 0, Thread, 0);
   *(int*)varaddr = 43;
   __tsan_java_move(varaddr, varaddr2, kBlockSize);
-  barrier_wait(&barrier);
   pthread_join(th, 0);
   __tsan_java_free(varaddr2, kBlockSize);
   fprintf(stderr, "DONE\n");
